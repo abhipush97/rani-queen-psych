@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
-import { Brain, Loader2, Eye, EyeOff, CheckCircle } from 'lucide-react'
+import { Brain, Loader2, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function SignupPage() {
@@ -17,7 +17,6 @@ export default function SignupPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [done, setDone] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -28,42 +27,37 @@ export default function SignupPage() {
       return
     }
     setLoading(true)
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
-    if (error) {
-      toast.error(error.message)
-      setLoading(false)
-      return
-    }
-    setDone(true)
-    setLoading(false)
-  }
 
-  if (done) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-stone-50 flex items-center justify-center px-4 py-16">
-        <Card className="max-w-md w-full border-0 shadow-xl">
-          <CardContent className="p-8 text-center">
-            <div className="w-16 h-16 rounded-full bg-teal-100 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-8 h-8 text-teal-600" />
-            </div>
-            <h2 className="text-xl font-bold text-stone-900 mb-2">Check your email</h2>
-            <p className="text-stone-500 text-sm mb-6">
-              We&apos;ve sent a confirmation link to <strong>{email}</strong>. Click it to activate your account.
-            </p>
-            <Button variant="outline" onClick={() => router.push('/auth/login')} className="w-full">
-              Back to Sign In
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
+    try {
+      // Create user via admin route (auto-confirmed, no email verification needed)
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, fullName }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        toast.error(data.error ?? 'Sign up failed')
+        return
+      }
+
+      // Auto sign in immediately
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+      if (signInError) {
+        toast.error('Account created — please sign in.')
+        router.push('/auth/login')
+        return
+      }
+
+      toast.success('Account created!')
+      router.push('/dashboard')
+    } catch {
+      toast.error('Something went wrong. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -84,55 +78,26 @@ export default function SignupPage() {
             <form onSubmit={handleSignup} className="space-y-5">
               <div>
                 <Label htmlFor="full-name">Full Name</Label>
-                <Input
-                  id="full-name"
-                  required
-                  autoComplete="name"
-                  value={fullName}
-                  onChange={e => setFullName(e.target.value)}
-                  placeholder="Your full name"
-                  className="mt-1"
-                />
+                <Input id="full-name" required autoComplete="name" value={fullName}
+                  onChange={e => setFullName(e.target.value)} placeholder="Your full name" className="mt-1" />
               </div>
-
               <div>
                 <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="mt-1"
-                />
+                <Input id="email" type="email" required autoComplete="email" value={email}
+                  onChange={e => setEmail(e.target.value)} placeholder="you@example.com" className="mt-1" />
               </div>
-
               <div>
                 <Label htmlFor="password">Password</Label>
                 <div className="relative mt-1">
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    minLength={8}
-                    autoComplete="new-password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="Min. 8 characters"
-                    className="pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
-                  >
+                  <Input id="password" type={showPassword ? 'text' : 'password'} required
+                    minLength={8} autoComplete="new-password" value={password}
+                    onChange={e => setPassword(e.target.value)} placeholder="Min. 8 characters" className="pr-10" />
+                  <button type="button" onClick={() => setShowPassword(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
-
               <Button type="submit" disabled={loading} className="w-full bg-teal-600 hover:bg-teal-700" size="lg">
                 {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating account...</> : 'Create Account'}
               </Button>
@@ -140,9 +105,7 @@ export default function SignupPage() {
 
             <p className="text-center text-sm text-stone-500 mt-6">
               Already have an account?{' '}
-              <Link href="/auth/login" className="text-teal-600 font-medium hover:underline">
-                Sign in
-              </Link>
+              <Link href="/auth/login" className="text-teal-600 font-medium hover:underline">Sign in</Link>
             </p>
           </CardContent>
         </Card>
